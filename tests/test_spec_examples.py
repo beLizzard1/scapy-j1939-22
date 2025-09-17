@@ -227,3 +227,4 @@ def test_figure_27_destination_specific_multi_pg() -> None:
         rendered = _render(dpdu_pkt)
         if rendered:
             assert "priority" in rendered and "pf" in rendered
+            print("Figure 27 DPDU1 packet:\n", rendered)

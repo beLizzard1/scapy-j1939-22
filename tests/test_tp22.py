@@ -268,6 +268,7 @@ def test_fdtp_packet_round_trip() -> None:
         rendered = _render(pkt)
         if rendered:
             assert "session" in rendered and "pgn" in rendered
+            print("FDTP Connection Packet:\n", rendered)
 
     if FDTPDataTransferPacket is not None:
         pkt_dt = FDTPDataTransferPacket.from_frame(frame)
@@ -277,3 +278,4 @@ def test_fdtp_packet_round_trip() -> None:
         rendered_dt = _render(pkt_dt)
         if rendered_dt:
             assert "segment_number" in rendered_dt
+            print("FDTP Data Transfer Packet:\n", rendered_dt)
