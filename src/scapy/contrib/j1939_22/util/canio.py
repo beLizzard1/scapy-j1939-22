@@ -1,5 +1,37 @@
-"""Lightweight abstraction for CAN/CAN-FD sockets."""
+
+
 from __future__ import annotations
+"""Lightweight abstraction for CAN/CAN-FD sockets."""
+
+import socket
+import struct
+from collections import deque
+from dataclasses import dataclass
+from typing import Deque, Iterable, Iterator, Optional
+
+
+def split_payload_and_assurance(data: bytes, tos: int, tf: int):
+    """
+    Split CAN payload and assurance data based on TOS and TF values.
+    Returns (payload, assurance_data) tuple.
+    """
+    # TOS = 2, TF = 0: All payload
+    if tos == 0b010 and tf == 0b000:
+        return data, b''
+    # TOS = 1, TF = 1,2: 4 bytes assurance
+    elif tos == 0b001 and tf in (0b001, 0b010):
+        return data[:-4], data[-4:]
+    # TOS = 1, TF = 3,5,6: 8 bytes assurance
+    elif tos == 0b001 and tf in (0b011, 0b101, 0b110):
+        return data[:-8], data[-8:]
+    # Reserved or undefined, treat all as payload
+    else:
+        return data, b''
+
+
+
+
+"""Lightweight abstraction for CAN/CAN-FD sockets."""
 
 import socket
 import struct

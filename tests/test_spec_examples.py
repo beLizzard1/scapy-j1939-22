@@ -2,6 +2,7 @@
 
 from scapy.contrib.j1939_22.apdu import APDU1, APDUType, J1939APDU
 from scapy.contrib.j1939_22.layers import ContainedParameterGroup, MultiPGMessage, DPDU1, DPDU3
+from scapy.contrib.j1939_22.util.canio import split_payload_and_assurance
 
 try:
     from scapy.contrib.j1939_22.layers import MultiPGPacket
@@ -35,9 +36,11 @@ def _format_hex_bytes(data: bytes) -> str:
 
 
 def describe_cpg(cpg: ContainedParameterGroup, index: int) -> str:
+    # Default PL is just the payload length
+    pl_str = f"{len(cpg.payload)}ᵈ"
     base = (
         f"C-PG {index}: TOS={_format_binary(cpg.tos)} TF={_format_binary(cpg.trailer_format)} "
-        f"CPGN={_format_hex(cpg.pgn, 5)} PL={len(cpg.payload)}"
+        f"CPGN={_format_hex(cpg.pgn, 5)}"
     )
 
     if cpg.tos == 0:
@@ -63,11 +66,12 @@ def describe_cpg(cpg: ContainedParameterGroup, index: int) -> str:
         cs_data = cpg.payload[-cs_length:]
         pg_data = cpg.payload[:-cs_length]
         description = cs_descriptions.get(cpg.trailer_format, "Assurance data")
+        pl_str = f"({len(pg_data)}ᵈ,{len(cs_data)}ᵈ)"
         return (
-            f"{base} payload={_format_hex_bytes(pg_data)} CS={_format_hex_bytes(cs_data)} ({description})"
+            f"{base} PL={pl_str} payload={_format_hex_bytes(pg_data)} CS={_format_hex_bytes(cs_data)} ({description})"
         )
 
-    return base + f" payload={_format_hex_bytes(cpg.payload)}"
+    return base + f" PL={pl_str} payload={_format_hex_bytes(cpg.payload)}"
 
 
 def describe_message(message: MultiPGMessage) -> str:
@@ -336,3 +340,45 @@ def test_figure_27_destination_specific_multi_pg() -> None:
             print("Figure 27 DPDU1 packet:\n", rendered)
     else:
         pass
+
+
+def test_split_payload_and_assurance_cases():
+    """Test payload/assurance split for all TOS/TF combinations of interest."""
+    # TOS=2, TF=0: all payload (11ᵈ)
+    data = b'PAYLOADDATA'
+    payload, assurance = split_payload_and_assurance(data, tos=2, tf=0)
+    assert payload == data and assurance == b''
+
+    # TOS=1, TF=1: 4 bytes assurance (32-bit OEM cybersecurity, 8ᵈ+4ᵈ)
+    data = b'PAYLOAD1234'  # 8ᵈ payload + 4ᵈ assurance
+    payload, assurance = split_payload_and_assurance(data, tos=1, tf=1)
+    assert payload == b'PAYLOAD' and assurance == b'1234'
+
+    # TOS=1, TF=2: 4 bytes assurance (32-bit OEM functional safety, 8ᵈ+4ᵈ)
+    data = b'ABCDEFGH1234'  # 8ᵈ payload + 4ᵈ assurance
+    payload, assurance = split_payload_and_assurance(data, tos=1, tf=2)
+    assert payload == b'ABCDEFGH' and assurance == b'1234'
+
+    # TOS=1, TF=3: 8 bytes assurance (32-bit OEM cybersecurity + 32-bit OEM functional safety, 8ᵈ+8ᵈ)
+    data = b'ABCDEFGH12345678'  # 8ᵈ payload + 8ᵈ assurance
+    payload, assurance = split_payload_and_assurance(data, tos=1, tf=3)
+    assert payload == b'ABCDEFGH' and assurance == b'12345678'
+
+    # TOS=1, TF=5: 8 bytes assurance (64-bit OEM cybersecurity, 8ᵈ+8ᵈ)
+    data = b'ABCDEFGH87654321'  # 8ᵈ payload + 8ᵈ assurance
+    payload, assurance = split_payload_and_assurance(data, tos=1, tf=5)
+    assert payload == b'ABCDEFGH' and assurance == b'87654321'
+
+    # TOS=1, TF=6: 8 bytes assurance (64-bit OEM functional safety, 8ᵈ+8ᵈ)
+    data = b'ABCDEFGHabcdefgh'  # 8ᵈ payload + 8ᵈ assurance
+    payload, assurance = split_payload_and_assurance(data, tos=1, tf=6)
+    assert payload == b'ABCDEFGH' and assurance == b'abcdefgh'
+
+    # Reserved/undefined: all payload
+    data = b'XYZ'
+    payload, assurance = split_payload_and_assurance(data, tos=1, tf=0)
+    assert payload == data and assurance == b''
+    payload, assurance = split_payload_and_assurance(data, tos=2, tf=1)
+    assert payload == data and assurance == b''
+    payload, assurance = split_payload_and_assurance(data, tos=3, tf=0)
+    assert payload == data and assurance == b''
