@@ -1,7 +1,7 @@
 """Sanity checks for the high level stack facade."""
-from scapy_j1939_22.apdu import APDUType, J1939APDU
-from scapy_j1939_22.stack import J1939Stack
-from scapy_j1939_22.transport.tp22 import TP22Transport
+from scapy.contrib.j1939_22.apdu import APDUType, J1939APDU
+from scapy.contrib.j1939_22.stack import J1939Stack
+from scapy.contrib.j1939_22.transport.tp22 import TP22Transport
 
 
 def test_stack_round_trip() -> None:

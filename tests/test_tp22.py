@@ -1,11 +1,12 @@
 """Unit tests for the native TP-22 transport implementation."""
-from scapy_j1939_22.apdu import APDUType, J1939APDU
-from scapy_j1939_22.transport import (
+from scapy.contrib.j1939_22.apdu import APDUType, J1939APDU
+from scapy.contrib.j1939_22.transport import (
     FDTPConnectionMessage,
     FDTPControl,
     FDTPDataTransferFrame,
     TP22Transport,
 )
+from scapy.contrib.j1939_22.util import LoopbackCAN
 
 
 def _control_frames(frames, control):
@@ -159,3 +160,72 @@ def test_responder_handles_bam_flow_without_ack() -> None:
     assert len(received) == 1
     assert received[0].payload == payload
     assert received[0].assurance_type is None
+
+
+def test_assurance_metadata_carries_into_eoms() -> None:
+    payload = bytes(range(61))
+    apdu = J1939APDU(
+        pgn=0x4321,
+        payload=payload,
+        apdu_type=APDUType.MULTI_PG,
+        assurance_type=5,
+        assurance_data=b"\xAA\xBB",
+    )
+
+    transport = TP22Transport()
+    transport.send(apdu)
+
+    session = transport.transmitted_frames()[0].session
+
+    transport.process_connection_message(
+        FDTPConnectionMessage.cts(
+            session=session,
+            next_segment=1,
+            segments_to_send=2,
+            request_code=0,
+            pgn=apdu.pgn,
+        )
+    )
+
+    frames = transport.transmitted_frames()
+    eoms = [
+        frame
+        for frame in frames
+        if isinstance(frame, FDTPConnectionMessage) and frame.control is FDTPControl.EOMS
+    ][-1]
+    assert eoms.byte9 == 5
+    assert eoms.byte8 == 2
+    assert eoms.assurance_data == b"\xAA\xBB"
+
+    transport.process_connection_message(
+        FDTPConnectionMessage.eoma(
+            session=session,
+            total_bytes=len(payload),
+            total_segments=2,
+            pgn=apdu.pgn,
+        )
+    )
+
+    received = list(transport.receive())
+    assert received[0].assurance_type == 5
+    assert received[0].assurance_data == b"\xAA\xBB"
+
+
+def test_tp22_can_socket_emits_single_frame() -> None:
+    loop = LoopbackCAN()
+    transport = TP22Transport(can_socket=loop, source_address=0x12)
+    apdu = J1939APDU(
+        pgn=0x00F004,
+        payload=b"\x01\x02",
+        apdu_type=APDUType.SINGLE_PG,
+        source_address=0x12,
+        priority=3,
+    )
+
+    transport.send(apdu)
+
+    frames = list(loop.recv_frames())
+    assert len(frames) == 1
+    expected_can_id = (3 << 26) | (0xF0 << 16) | (0x04 << 8) | 0x12
+    assert frames[0].can_id == expected_can_id
+    assert frames[0].data.startswith(b"\x01\x02")
