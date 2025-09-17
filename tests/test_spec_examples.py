@@ -231,7 +231,11 @@ def test_figure_27_destination_specific_multi_pg() -> None:
     else:
         # Fallback textual output when Scapy packets are unavailable
         summary = [
-            f"C-PG {idx+1}: TOS={c.tos} TF={c.trailer_format} PGN=0x{c.pgn:05X} len={len(c.payload)}"
+            (
+                f"C-PG {idx+1}: TOS={c.tos:03b}_{{b}} TF={c.trailer_format:03b}_{{b}} "
+                f"CPGN={c.pgn:05X}_{{h}} "
+                f"payload={c.payload.hex().upper()}"
+            )
             for idx, c in enumerate(message)
         ]
         print("Figure 27 Multi-PG summary:\n" + "\n".join(summary))
