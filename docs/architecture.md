@@ -32,6 +32,8 @@ for backwards compatibility.
 - `layers/multipg.py` encodes contained parameter groups (C-PGs) and padding as
   specified in §6.5, allowing Multi-PG payloads to be assembled programmatically.
 - Tests cover the Figure 26 layout to confirm header bit placement.
+- Multi-PG and RTS/CTS tests link to extracted spec figures stored under
+  `docs/figures/` for easy visual comparison (e.g. Figure 26 and Figure 27).
 
 ## Security
 

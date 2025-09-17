@@ -1,7 +1,7 @@
 """Regression tests derived from SAE J1939-22 specification examples."""
 
-from scapy.contrib.j1939_22.apdu import APDUType, J1939APDU
-from scapy.contrib.j1939_22.layers import ContainedParameterGroup, MultiPGMessage
+from scapy.contrib.j1939_22.apdu import APDU1, APDUType, J1939APDU
+from scapy.contrib.j1939_22.layers import ContainedParameterGroup, MultiPGMessage, DPDU1
 from scapy.contrib.j1939_22.transport import (
     FDTPConnectionMessage,
     FDTPControl,
@@ -129,3 +129,52 @@ def test_padding_cpg_matches_spec() -> None:
 
     message = MultiPGMessage([cpg])
     assert message.total_length() == len(encoded)
+
+
+def test_figure_27_destination_specific_multi_pg() -> None:
+    """Encode the Figure 27 Multi-PG example (four Requests plus padding)."""
+
+    cpg1 = ContainedParameterGroup(
+        tos=2,
+        trailer_format=0,
+        pgn=0x00EA00,
+        payload=(0x00FECE).to_bytes(3, byteorder="little"),
+    )
+    cpg2_payload = (0x00C100).to_bytes(3, byteorder="little") + bytes.fromhex("C80DC80D80FE80FE")
+    cpg2 = ContainedParameterGroup(
+        tos=1,
+        trailer_format=5,
+        pgn=0x00EA00,
+        payload=cpg2_payload,
+    )
+    cpg3 = ContainedParameterGroup(
+        tos=2,
+        trailer_format=0,
+        pgn=0x00EA00,
+        payload=(0x00FDB8).to_bytes(3, byteorder="little"),
+    )
+    cpg4 = ContainedParameterGroup(
+        tos=2,
+        trailer_format=0,
+        pgn=0x00EA00,
+        payload=(0x009E00).to_bytes(3, byteorder="little"),
+    )
+    cpg5 = ContainedParameterGroup(tos=0, trailer_format=0, pgn=0, payload=b"\xAA" * 9, padding_header_bytes=3)
+
+    message = MultiPGMessage([cpg1, cpg2, cpg3, cpg4, cpg5])
+    encoded_payload = message.encode()
+
+    assert message.total_length() == len(encoded_payload) == 48
+
+    apdu = APDU1(
+        pgn=0x002500,
+        payload=encoded_payload,
+        destination_address=0x03,
+        source_address=0xF9,
+        priority=6,
+    )
+    dpdu = DPDU1.from_apdu(apdu)
+
+    expected_can_id = (6 << 26) | (0 << 24) | (0x25 << 16) | (0x03 << 8) | 0xF9
+    assert dpdu.to_can_id() == expected_can_id
+    assert dpdu.data_field() == encoded_payload

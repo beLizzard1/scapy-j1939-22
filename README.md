@@ -79,8 +79,13 @@ from scapy.contrib.j1939_22 import TP22Transport
 
 Tests in `tests/test_spec_examples.py` encode sequences published in SAE
 J1939-22 (e.g. Appendix A Figure A1 RTS/CTS flow and Figure 26 Multi-PG
-headers). This offers guard rails that the helpers continue to match the
+headers, Figure 27 destination-specific Multi-PG). This offers guard rails that the helpers continue to match the
 standard as additional behaviour is implemented. The `layers/multipg.py`
 module mirrors the contained-parameter-group format described in §6.5, and
 `transport/fdtp.py` encodes the connection management fields referenced in
 §6.6.
+
+PNG renders for Figures 26 and 27 (see `docs/figures/figure_26_multi_pg_example.png`
+and `docs/figures/figure_27_multi_pg_destination_specific.png`) were extracted
+directly from the SAE publication to simplify cross-referencing between tests
+and the standard.
