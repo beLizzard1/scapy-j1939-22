@@ -8,6 +8,12 @@ from scapy.contrib.j1939_22.transport import (
 )
 from scapy.contrib.j1939_22.util import LoopbackCAN
 
+try:
+    from scapy.contrib.j1939_22.transport import FDTPConnectionPacket, FDTPDataTransferPacket
+except ImportError:  # pragma: no cover - Scapy not installed
+    FDTPConnectionPacket = None
+    FDTPDataTransferPacket = None
+
 
 def _control_frames(frames, control):
     return [
@@ -229,3 +235,25 @@ def test_tp22_can_socket_emits_single_frame() -> None:
     expected_can_id = (3 << 26) | (0xF0 << 16) | (0x04 << 8) | 0x12
     assert frames[0].can_id == expected_can_id
     assert frames[0].data.startswith(b"\x01\x02")
+
+
+def test_fdtp_packet_round_trip() -> None:
+    conn = FDTPConnectionMessage.rts(
+        session=5,
+        total_bytes=128,
+        total_segments=3,
+        max_segments=2,
+        assurance_type=7,
+        pgn=0x00F004,
+    )
+    frame = FDTPDataTransferFrame(session=5, segment_number=2, data=b"\x00" * 60)
+
+    if FDTPConnectionPacket is not None:
+        pkt = FDTPConnectionPacket.from_message(conn)
+        roundtrip = pkt.to_message()
+        assert roundtrip.encode() == conn.encode()
+
+    if FDTPDataTransferPacket is not None:
+        pkt_dt = FDTPDataTransferPacket.from_frame(frame)
+        roundtrip_dt = pkt_dt.to_frame()
+        assert roundtrip_dt.encode() == frame.encode()

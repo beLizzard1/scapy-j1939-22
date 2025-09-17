@@ -11,11 +11,43 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import ClassVar, Optional
 
+import struct
+
+try:  # pragma: no cover - scapy may be unavailable when running unit tests
+    from scapy.fields import BitField, ByteField, StrField  # type: ignore
+    from scapy.packet import Packet  # type: ignore
+except ImportError:  # pragma: no cover
+    Packet = None  # type: ignore
+
 __all__ = [
     "FDTPControl",
     "FDTPConnectionMessage",
     "FDTPDataTransferFrame",
 ]
+
+if Packet is not None:  # pragma: no branch
+
+    from scapy.fields import Field  # type: ignore
+
+    class LEUInt24Field(Field):
+        """Little endian unsigned 24-bit integer field."""
+
+        def __init__(self, name: str, default: int = 0) -> None:
+            super().__init__(name, default, fmt="3s")
+
+        def addfield(self, pkt, s: bytes, val: int) -> bytes:  # type: ignore[override]
+            if not 0 <= val <= 0xFFFFFF:
+                raise ValueError(f"value {val} out of range for 24-bit field")
+            return s + struct.pack("<I", val & 0xFFFFFF)[:3]
+
+        def getfield(self, pkt, s: bytes):  # type: ignore[override]
+            if len(s) < 3:
+                raise ValueError("Buffer underrun for 24-bit field")
+            raw = s[:3]
+            return s[3:], struct.unpack("<I", raw + b"\x00")[0]
+
+        def i2repr(self, pkt, val: int) -> str:  # type: ignore[override]
+            return hex(val)
 
 
 class FDTPControl(Enum):
@@ -317,3 +349,92 @@ class FDTPDataTransferFrame:
         """Return True when the frame likely contains padding bytes."""
 
         return len(self.data) != self.MAX_SEGMENT_SIZE
+
+
+if Packet is not None:  # pragma: no branch
+
+    class FDTPConnectionPacket(Packet):
+        """Scapy Packet representation of FD.TP connection management frames."""
+
+        name = "J1939-22 FD.TP.CM"
+        fields_desc = [
+            BitField("session", 0, 4),
+            BitField("control_raw", 0, 4),
+            LEUInt24Field("param_2_4", 0),
+            LEUInt24Field("param_5_7", 0),
+            ByteField("byte8", 0),
+            ByteField("byte9", 0),
+            LEUInt24Field("pgn", 0),
+            StrField("assurance_data", b""),
+        ]
+
+        def control(self) -> FDTPControl:
+            return FDTPControl(self.control_raw)
+
+        def to_message(self) -> FDTPConnectionMessage:
+            return FDTPConnectionMessage(
+                control=self.control(),
+                session=self.session,
+                _bytes_2_4=_encode_u24(self.param_2_4),
+                _bytes_5_7=_encode_u24(self.param_5_7),
+                byte8=self.byte8,
+                byte9=self.byte9,
+                pgn=self.pgn,
+                assurance_data=bytes(self.assurance_data),
+            )
+
+        @classmethod
+        def from_message(cls, message: FDTPConnectionMessage) -> "FDTPConnectionPacket":
+            return cls(
+                session=message.session,
+                control_raw=message.control.value,
+                param_2_4=int.from_bytes(message._bytes_2_4, byteorder="little"),
+                param_5_7=int.from_bytes(message._bytes_5_7, byteorder="little"),
+                byte8=message.byte8,
+                byte9=message.byte9,
+                pgn=message.pgn,
+                assurance_data=message.assurance_data,
+            )
+
+        def extract_padding(self, s: bytes) -> tuple[bytes, bytes]:  # pragma: no cover
+            return b"", s
+
+
+    class FDTPDataTransferPacket(Packet):
+        """Scapy Packet representation of FD.TP data transfer frames."""
+
+        name = "J1939-22 FD.TP.DT"
+        fields_desc = [
+            BitField("session", 0, 4),
+            BitField("dtfi", 0, 4),
+            LEUInt24Field("segment_number", 1),
+            StrField("segment_data", b""),
+        ]
+
+        def to_frame(self) -> FDTPDataTransferFrame:
+            return FDTPDataTransferFrame(
+                session=self.session,
+                segment_number=self.segment_number,
+                data=bytes(self.segment_data),
+                dt_format_indicator=self.dtfi,
+            )
+
+        @classmethod
+        def from_frame(cls, frame: FDTPDataTransferFrame) -> "FDTPDataTransferPacket":
+            return cls(
+                session=frame.session,
+                dtfi=frame.dt_format_indicator,
+                segment_number=frame.segment_number,
+                segment_data=frame.data,
+            )
+
+        def extract_padding(self, s: bytes) -> tuple[bytes, bytes]:  # pragma: no cover
+            return b"", s
+
+
+    __all__.extend(["FDTPConnectionPacket", "FDTPDataTransferPacket"])
+
+else:  # pragma: no cover - Scapy not available
+
+    FDTPConnectionPacket = None
+    FDTPDataTransferPacket = None
