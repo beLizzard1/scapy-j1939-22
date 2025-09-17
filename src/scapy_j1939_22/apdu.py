@@ -26,12 +26,16 @@ class J1939APDU:
         pgn: The Parameter Group Number that identifies the PG payload.
         payload: Raw byte payload for the PG contents.
         apdu_type: Indicates whether the data is a single, multi, or composite PG.
+        assurance_type: Optional assurance data type reported in transport metadata.
+        assurance_data: Optional assurance data blob accompanying the PG contents.
     """
 
     pgn: int
     payload: bytes
     apdu_type: APDUType = APDUType.SINGLE_PG
     spn_values: Optional[dict[str, int]] = None
+    assurance_type: Optional[int] = None
+    assurance_data: Optional[bytes] = None
 
     def is_segmented(self) -> bool:
         """Return True when this APDU requires transport segmentation."""
