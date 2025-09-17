@@ -7,6 +7,18 @@ try:
     from scapy.contrib.j1939_22.layers import MultiPGPacket
 except ImportError:  # pragma: no cover - Scapy not installed
     MultiPGPacket = None
+
+
+def _render(packet) -> str | None:
+    if packet is None:
+        return None
+    show = getattr(packet, "show", None)
+    if show is None:
+        return None
+    try:
+        return show(dump=True)
+    except TypeError:  # pragma: no cover - older Scapy versions
+        return show()
 from scapy.contrib.j1939_22.transport import (
     FDTPConnectionMessage,
     FDTPControl,
@@ -212,3 +224,6 @@ def test_figure_27_destination_specific_multi_pg() -> None:
         assert decoded_pkt.length == len(encoded_payload)
         msg = MultiPGPacket(len(encoded_payload), encoded_payload).to_message()
         assert msg.encode() == encoded_payload
+        rendered = _render(dpdu_pkt)
+        if rendered:
+            assert "priority" in rendered and "pf" in rendered

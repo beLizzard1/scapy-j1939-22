@@ -15,6 +15,18 @@ except ImportError:  # pragma: no cover - Scapy not installed
     FDTPDataTransferPacket = None
 
 
+def _render(packet) -> str | None:
+    if packet is None:
+        return None
+    show = getattr(packet, "show", None)
+    if show is None:
+        return None
+    try:
+        return show(dump=True)
+    except TypeError:  # pragma: no cover
+        return show()
+
+
 def _control_frames(frames, control):
     return [
         frame
@@ -253,9 +265,15 @@ def test_fdtp_packet_round_trip() -> None:
         raw = bytes(pkt)
         rebuilt = FDTPConnectionPacket(raw).to_message()
         assert rebuilt.encode() == conn.encode()
+        rendered = _render(pkt)
+        if rendered:
+            assert "session" in rendered and "pgn" in rendered
 
     if FDTPDataTransferPacket is not None:
         pkt_dt = FDTPDataTransferPacket.from_frame(frame)
         raw_dt = bytes(pkt_dt)
         rebuilt_dt = FDTPDataTransferPacket(raw_dt).to_frame()
         assert rebuilt_dt.encode() == frame.encode()
+        rendered_dt = _render(pkt_dt)
+        if rendered_dt:
+            assert "segment_number" in rendered_dt
