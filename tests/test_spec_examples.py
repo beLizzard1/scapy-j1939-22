@@ -228,3 +228,10 @@ def test_figure_27_destination_specific_multi_pg() -> None:
         if rendered:
             assert "priority" in rendered and "pf" in rendered
             print("Figure 27 DPDU1 packet:\n", rendered)
+    else:
+        # Fallback textual output when Scapy packets are unavailable
+        summary = [
+            f"C-PG {idx+1}: TOS={c.tos} TF={c.trailer_format} PGN=0x{c.pgn:05X} len={len(c.payload)}"
+            for idx, c in enumerate(message)
+        ]
+        print("Figure 27 Multi-PG summary:\n" + "\n".join(summary))
