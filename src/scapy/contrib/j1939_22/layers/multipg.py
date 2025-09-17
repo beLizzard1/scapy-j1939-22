@@ -4,6 +4,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, List
 
+try:  # pragma: no cover - scapy may be unavailable in bare environments
+    from scapy.fields import FieldLenField, StrLenField  # type: ignore
+    from scapy.packet import Packet  # type: ignore
+except ImportError:  # pragma: no cover
+    Packet = None  # type: ignore
+
 __all__ = ["ContainedParameterGroup", "MultiPGMessage"]
 
 
@@ -53,6 +59,38 @@ class ContainedParameterGroup:
 
         return self.header_bytes() + self.payload
 
+    @classmethod
+    def decode(cls, raw: bytes, *, padding_header_bytes: int = 3) -> "ContainedParameterGroup":
+        if not raw:
+            raise ValueError("C-PG header requires data")
+        tos = (raw[0] >> 5) & 0x7
+        tf = (raw[0] >> 2) & 0x7
+        edp = (raw[0] >> 1) & 0x1
+        dp = raw[0] & 0x1
+
+        if tos == 0:
+            if len(raw) < padding_header_bytes:
+                raise ValueError("Padding C-PG header truncated")
+            payload = raw[padding_header_bytes:]
+            return cls(
+                tos=0,
+                trailer_format=tf,
+                pgn=0,
+                payload=payload,
+                padding_header_bytes=padding_header_bytes,
+            )
+
+        if len(raw) < 4:
+            raise ValueError("C-PG header truncated")
+        pf = raw[1]
+        ps = raw[2]
+        length = raw[3]
+        payload = raw[4 : 4 + length]
+        if len(payload) != length:
+            raise ValueError("C-PG payload truncated")
+        pgn = (edp << 17) | (dp << 16) | (pf << 8) | ps
+        return cls(tos=tos, trailer_format=tf, pgn=pgn, payload=payload)
+
 
 @dataclass(slots=True)
 class MultiPGMessage:
@@ -71,3 +109,50 @@ class MultiPGMessage:
 
     def __iter__(self) -> Iterable[ContainedParameterGroup]:
         return iter(self.cpgs)
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "MultiPGMessage":
+        cpgs: List[ContainedParameterGroup] = []
+        i = 0
+        while i < len(data):
+            header = data[i]
+            tos = (header >> 5) & 0x7
+            if tos == 0:
+                cpg = ContainedParameterGroup.decode(data[i:])
+                cpgs.append(cpg)
+                break
+            if i + 4 > len(data):
+                raise ValueError("C-PG header truncated")
+            length = data[i + 3]
+            chunk = data[i : i + 4 + length]
+            if len(chunk) < 4 + length:
+                raise ValueError("C-PG payload truncated")
+            cpg = ContainedParameterGroup.decode(chunk)
+            cpgs.append(cpg)
+            i += len(chunk)
+        return cls(cpgs=cpgs)
+
+
+if Packet is not None:  # pragma: no branch
+
+    class MultiPGPacket(Packet):
+        """Scapy Packet wrapper for Multi-PG payloads."""
+
+        name = "J1939-22 Multi-PG"
+        fields_desc = [
+            FieldLenField("length", None, length_of="data", fmt="B"),
+            StrLenField("data", b"", length_from=lambda pkt: pkt.length),
+        ]
+
+        def to_message(self) -> MultiPGMessage:
+            return MultiPGMessage.from_bytes(bytes(self.data))
+
+        @classmethod
+        def from_message(cls, message: MultiPGMessage) -> "MultiPGPacket":
+            data = message.encode()
+            return cls(length=len(data), data=data)
+
+        def extract_padding(self, s: bytes) -> tuple[bytes, bytes]:  # pragma: no cover - Scapy hook
+            return b"", s
+
+    __all__.append("MultiPGPacket")

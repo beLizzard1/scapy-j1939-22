@@ -2,6 +2,11 @@
 
 from scapy.contrib.j1939_22.apdu import APDU1, APDUType, J1939APDU
 from scapy.contrib.j1939_22.layers import ContainedParameterGroup, MultiPGMessage, DPDU1
+
+try:
+    from scapy.contrib.j1939_22.layers import MultiPGPacket
+except ImportError:  # pragma: no cover - Scapy not installed
+    MultiPGPacket = None
 from scapy.contrib.j1939_22.transport import (
     FDTPConnectionMessage,
     FDTPControl,
@@ -166,6 +171,10 @@ def test_figure_27_destination_specific_multi_pg() -> None:
 
     assert message.total_length() == len(encoded_payload) == 48
 
+    decoded_message = MultiPGMessage.from_bytes(encoded_payload)
+    assert len(decoded_message.cpgs) == 5
+    assert [c.tos for c in decoded_message.cpgs] == [2, 1, 2, 2, 0]
+
     apdu = APDU1(
         pgn=0x002500,
         payload=encoded_payload,
@@ -178,3 +187,8 @@ def test_figure_27_destination_specific_multi_pg() -> None:
     expected_can_id = (6 << 26) | (0 << 24) | (0x25 << 16) | (0x03 << 8) | 0xF9
     assert dpdu.to_can_id() == expected_can_id
     assert dpdu.data_field() == encoded_payload
+
+    if MultiPGPacket is not None:
+        pkt = MultiPGPacket.from_message(message)
+        assert pkt.length == len(encoded_payload)
+        assert pkt.to_message().encode() == encoded_payload
