@@ -250,10 +250,12 @@ def test_fdtp_packet_round_trip() -> None:
 
     if FDTPConnectionPacket is not None:
         pkt = FDTPConnectionPacket.from_message(conn)
-        roundtrip = pkt.to_message()
-        assert roundtrip.encode() == conn.encode()
+        raw = bytes(pkt)
+        rebuilt = FDTPConnectionPacket(raw).to_message()
+        assert rebuilt.encode() == conn.encode()
 
     if FDTPDataTransferPacket is not None:
         pkt_dt = FDTPDataTransferPacket.from_frame(frame)
-        roundtrip_dt = pkt_dt.to_frame()
-        assert roundtrip_dt.encode() == frame.encode()
+        raw_dt = bytes(pkt_dt)
+        rebuilt_dt = FDTPDataTransferPacket(raw_dt).to_frame()
+        assert rebuilt_dt.encode() == frame.encode()

@@ -192,3 +192,23 @@ def test_figure_27_destination_specific_multi_pg() -> None:
         pkt = MultiPGPacket.from_message(message)
         assert pkt.length == len(encoded_payload)
         assert pkt.to_message().encode() == encoded_payload
+
+    # When Scapy is available, exercise the Packet build/dissection pipeline.
+    if hasattr(DPDU1, "fields_desc") and MultiPGPacket is not None:
+        dpdu_pkt = DPDU1(
+            priority=6,
+            edp=0,
+            dp=0,
+            pf=0x25,
+            ps=0x03,
+            sa=0xF9,
+            length=len(encoded_payload),
+            payload=encoded_payload,
+        )
+        raw_bytes = bytes(dpdu_pkt)
+        # Prepend CAN identifier for clarity (not used directly by Scapy here)
+        assert raw_bytes.endswith(encoded_payload)
+        decoded_pkt = DPDU1(raw_bytes)
+        assert decoded_pkt.length == len(encoded_payload)
+        msg = MultiPGPacket(len(encoded_payload), encoded_payload).to_message()
+        assert msg.encode() == encoded_payload
