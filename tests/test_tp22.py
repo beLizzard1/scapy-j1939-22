@@ -272,8 +272,8 @@ def test_fdtp_packet_round_trip() -> None:
     else:
         print(
             "FDTP Connection Message:\n",
-            f"control={conn.control.name} session={conn.session:01X}_{{h}} total_bytes={conn.total_bytes} "
-            f"total_segments={conn.total_segments} pgn={conn.pgn:05X}_{{h}}",
+            f"control={conn.control.name} session={conn.session:01X}\u2095 total_bytes={conn.total_bytes} "
+            f"total_segments={conn.total_segments} pgn={conn.pgn:05X}\u2095",
         )
 
     if FDTPDataTransferPacket is not None:
@@ -288,5 +288,5 @@ def test_fdtp_packet_round_trip() -> None:
     else:
         print(
             "FDTP Data Transfer Frame:\n",
-            f"session={frame.session:01X}_{{h}} segment={frame.segment_number:06X}_{{h}} len={len(frame.data)}",
+            f"session={frame.session:01X}\u2095 segment={frame.segment_number:06X}\u2095 len={len(frame.data)}",
         )
